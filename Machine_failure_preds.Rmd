@@ -58,6 +58,7 @@ library(mltools)
 library(data.table)
 library(visdat)
 library(janitor)
+library(cowplot)
 ```
 
 Great ! We have all the libraries loaded. Next, we are gonna load the required dataset for conducting the machine failure classification analysis. 
@@ -137,9 +138,8 @@ df_type_group <- df_type_group %>% group_by(type) %>% mutate(total = sum(count))
 df_type_group <- df_type_group %>% mutate(percentage = 100 * (count/total))
 pl1 <- ggplot(data = df_type_group, 
               aes(x = factor(machine_failure),
-                  y = count)) + geom_col(aes(fill = type)) + facet_wrap(~type) + geom_label(aes(label = count)) + labs(x = "Machine failure status", 
-                                                                                                                       y = "Number of incidents") + ggtitle("Number of machine
-                                                                                                                                                            failures for each type") + theme(legend.position = 'none') + theme_classic()
+                  y = count)) + geom_col(aes(fill = type),color='black') + facet_wrap(~type) + geom_label(aes(label = count)) + labs(x = "Machine failure status", 
+                                                                                                                       y = "Number of incidents") + ggtitle("Number of machine failures for each type") + theme_classic() + theme(legend.position = 'none') 
 pl1
 ```
 
@@ -149,4 +149,59 @@ Figure \@ref(fig:failtype) illustrates the number of failures observed for each 
 - __2 %__ of the incidents for machine type "L"\
 - __1 %__ of the incidents for machine type "M"\
 
+Hence, we can observe that the number of failure cases are __fairly evenly distributed among each of the machine types.__
 
+## Air and process temperatures
+
+Temperatures can play a critical role in relation to machine health. In this dataset, we have air and process temperatures. The difference of these values could allow us to understand the overall heat dissipation of the machines. Analysing these variables may allow us when do the machines undergo overall failure as well as heat dissipation failure (HDF).
+
+Leet us first study the distribution of the temperature values.
+
+```{r temps, fig.cap="Temperature variation distribution",fig.align='center'}
+
+pl2 <- ggplot(data = df_train,
+              aes(x = process_temperature_k,
+                  fill = factor(hdf)),
+              alpha = 0.6) + geom_histogram(alpha = 0.8,
+                                            position = 'identity',color='black') + scale_fill_manual(values = c("blue", "red")) + theme_classic() + labs(x = "Process temperature (K)" , y = "Number of incidences", fill = 'HDF status')
+
+pl3 <- ggplot(data = df_train,
+              aes(x = air_temperature_k,
+                  fill = factor(hdf))) + geom_histogram(alpha = 0.8,
+                                                        position = 'identity',color='black') + scale_fill_manual(values = c("blue", "red")) + theme_classic() + labs(x = "Air temperature (K)" , y = "Number of incidences", fill = 'HDF status')
+
+plot_grid(pl3,pl2, labels = c("Air temperatures","Process temperatures"))
+
+```
+
+As we can observe from \@ref(fig:temps), majority of the heat dissipation failures have occurred __at relatively higher values of air temperatures__. These air temperatures are observed to be __around 302.5 K__. Higher air temperatures invariably leads to lower value of heat dissipation which may cause heat dissipation failure and subsequently, machine failure.
+
+Heat dissipation values are governed by the following heat transfer equation.
+
+$$ \boxed{\Delta H = mC_p(T_{process} - T_{air})}$$
+Based on the above equation, let us now study how the difference between process and air temperatures vary for heat dissipation failures.
+
+
+```{r tempdiff, fig.cap="Heat dissipation failure based on temperature difference",fig.align='center'}
+df_temp_diff <- df_train %>% select(c(process_temperature_k,air_temperature_k,hdf)) %>% mutate(temp_diff = process_temperature_k - air_temperature_k)
+
+
+pl4 <- ggplot(data = df_temp_diff,
+              aes(x = temp_diff,
+                  fill = factor(hdf)),
+              alpha = 0.6) + geom_histogram(alpha = 0.8,
+                                            position = 'identity',color='black') + scale_fill_manual(values = c("blue", "red")) + theme_classic() + labs(x = "Temperature difference (K)" , y = "Number of incidences", fill = 'HDF status') + ggtitle("Heat dissipation failure based on temperature difference") + 
+  
+  annotate("segment",x = 5,
+    y = 2500,xend = 7 ,
+    yend = 5 ,arrow = arrow(type = "closed", 
+                              length = unit(0.02, "npc"))
+  ) +
+  annotate("text",x = 5,
+    y = 3800,colour = "red",
+    label = 'High chances of HDF \n due to low temperature difference',
+    size = unit(3, "pt")) + theme(axis.text.x = element_text(angle = 10,face = 'bold')) 
+pl4
+```
+
+As illustrated by \@ref(fig:tempdiff) and based on the heat transfer equation, we can observe that __the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures.__
