@@ -1,0 +1,152 @@
+---
+title: "Binary Machine Failure Prediction"
+author: "Arindam Baruah"
+date: "2023-06-13"
+output:
+  bookdown::html_document2:
+   
+    toc: false
+    toc_float: true
+    theme: united
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+
+
+
+
+
+# Introduction
+
+Binary machine failure prediction using machine learning is a technique employed to anticipate the occurrence of failures or malfunctions in a binary system or machine. With the increasing complexity of modern machines, the ability to predict and prevent failures becomes crucial for optimizing performance, reducing downtime, and avoiding costly repairs.
+
+Machine learning algorithms play a vital role in this prediction process by analyzing historical data and identifying patterns or anomalies that indicate potential failures. These algorithms learn from past failure instances, considering various factors such as sensor readings, environmental conditions, maintenance records, and other relevant parameters.
+
+The predictive models are trained on labeled datasets, where each instance is associated with a failure or non-failure outcome. Common machine learning techniques used for binary machine failure prediction include __logistic regression, decision trees, random forests, support vector machines (SVM), and neural networks__.
+
+During the training phase, the algorithms learn the relationships between input features and failure occurrences, thereby enabling them to make accurate predictions on unseen data. Feature engineering, which involves selecting or transforming relevant input variables, is an essential step in improving the model's performance.
+
+Once the model is trained, it can be deployed to make real-time predictions on new data streams. By continuously monitoring machine inputs and comparing them to the learned patterns, the system can generate alerts or take preventive actions whenever a potential failure is detected. This proactive approach helps minimize unexpected downtime, reduce maintenance costs, and improve overall operational efficiency.
+
+Binary machine failure prediction using machine learning is widely applied across various industries, including manufacturing, power generation, healthcare, transportation, and more. By leveraging the power of data and advanced analytics, it offers a valuable tool for optimizing maintenance strategies, enhancing productivity, and ensuring the reliability of critical systems.
+
+```{r fig.align='center',fig.height=3, fig.width=3, fig.cap="Source: www.gesrepair.com"}
+knitr::include_graphics("mach_failure.jpeg")
+```
+
+# Importing the relevant libraries and dataset 🛠️
+
+First, we import the required libraries which we will use to perform the current analysis.
+
+```{r}
+library(tidyverse)
+library(naniar)
+library(bookdown)
+library(stringr)
+library(stringi)
+library(lubridate)
+library(DT)
+library(forcats)
+library(ggthemes)
+library(corrplot)
+library(mltools)
+library(data.table)
+library(visdat)
+library(janitor)
+```
+
+Great ! We have all the libraries loaded. Next, we are gonna load the required dataset for conducting the machine failure classification analysis. 
+
+We will use one dataset for the purpose of exploratory data analysis and training the classification model while the test dataset for testing the classification model on a completely new dataset.
+
+After reading the data, let us see how the train dataset looks like.
+
+```{r read-data}
+
+df_train <- read_csv("data/train.csv")
+df_test <-  read_csv("data/test.csv")
+head(df_train)
+```
+
+We can observe that there are multiple process parameters present in the dataset which can help us analyse whether a machine undergoes failure. We can also observe that there are multiple abbreviations in this dataset. Let us try to understand what do these abbreviations mean :
+
+1. __Tool Wear Failure (TWF)__: A type of machine failure which is associated with excessive tool wear.
+2. __Heat Dissipation Failure (HDF)__: Machine failures which are associated with high process temperatures.
+3. __Power Failure (PWF)__: Machine failures which are associated with power readings above or below a certain value.
+4. __Overstrain Failure (OSF)__: Machine failures which are associated with high strain values.
+5. __Random Failure (RNF)__:  Machine failures which maybe associated with random conditions.
+
+# Data cleaning
+
+## Check for null values
+
+As a part of checking for the cleanliness of the dataset, let us visaulise the presence of null values for each of the variables.
+
+```{r missvis,fig.cap="Missingness in the dataset",fig.align='center'}
+
+gg_miss_var(df_train)
+```
+As we can observe from figure \@ref(fig:missvis), there are no missing values for any of the variables in the dataset. As a result, the __dataset can be considered clean__ for further analysis.
+
+## Removal of variables
+
+After studying for the presence of null values, we now remove the variables that do not provide any extra insights into our analysis.
+
+```{r remove-var}
+
+df_train <- df_train %>% select(-c(id,`Product ID`))
+
+```
+
+## Cleaning the variable names
+
+The current dataset contains variable names which are not ideal for data wrangling and EDA. Hence, we will try to remove any unnecessary white space and special characters for each of the variable names.
+
+```{r clean-names}
+
+df_train <- clean_names(df_train)
+head(df_train)
+
+```
+
+
+
+# Exploratory Data Analysis
+
+After obtaining the cleansed dataset, we now try to visualise the relationship of each of the variables and attempt to obtain critical insights.
+
+## Type of machine
+
+There are a total of 3 types  machines in this dataset. These are encoded as:
+
+1. __L (Light)__
+2. __M (Medium)__
+3. __H (Heavy)__
+
+Let us see the number of machine failures for each of the machine types.
+
+```{r failtype, fig.cap="Number of machine failures for each type", fig.align='center'}
+
+df_type_group <- df_train %>% group_by(type,machine_failure) %>% summarise(count = n())
+df_type_group <- df_type_group %>% group_by(type) %>% mutate(total = sum(count))
+df_type_group <- df_type_group %>% mutate(percentage = 100 * (count/total))
+pl1 <- ggplot(data = df_type_group, 
+              aes(x = factor(machine_failure),
+                  y = count)) + geom_col(aes(fill = type)) + facet_wrap(~type) + geom_label(aes(label = count)) + labs(x = "Machine failure status", 
+                                                                                                                       y = "Number of incidents") + ggtitle("Number of machine
+                                                                                                                                                            failures for each type") + theme(legend.position = 'none') + theme_classic()
+pl1
+```
+
+
+Figure \@ref(fig:failtype) illustrates the number of failures observed for each machine type. The failures constitute:\
+- __1 %__ of the incidents for machine type "H"\
+- __2 %__ of the incidents for machine type "L"\
+- __1 %__ of the incidents for machine type "M"\
+
+
