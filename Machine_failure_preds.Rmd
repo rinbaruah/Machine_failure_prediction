@@ -21,6 +21,7 @@ knitr::opts_chunk$set(echo = TRUE,
 
 
 
+
 # Introduction
 
 Binary machine failure prediction using machine learning is a technique employed to anticipate the occurrence of failures or malfunctions in a binary system or machine. With the increasing complexity of modern machines, the ability to predict and prevent failures becomes crucial for optimizing performance, reducing downtime, and avoiding costly repairs.
@@ -149,7 +150,10 @@ Figure \@ref(fig:failtype) illustrates the number of failures observed for each 
 - __2 %__ of the incidents for machine type "L"\
 - __1 %__ of the incidents for machine type "M"\
 
-Hence, we can observe that the number of failure cases are __fairly evenly distributed among each of the machine types.__
+<div class="alert alert-info">
+  <strong> 📵 Hence, we can observe that the number of failure cases are <strong>fairly evenly distributed among each of the machine types.<strong> 📵 .
+</div>
+
 
 ## Air and process temperatures
 
@@ -204,4 +208,74 @@ pl4 <- ggplot(data = df_temp_diff,
 pl4
 ```
 
-As illustrated by \@ref(fig:tempdiff) and based on the heat transfer equation, we can observe that __the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures.__
+
+
+As illustrated by figure \@ref(fig:tempdiff) and based on the heat transfer equation, we can observe that 
+
+
+<div class="alert alert-info">
+  <strong> ⚠️ the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures. ⚠️</strong> .
+</div>
+
+## Torque and Tool rotation speed
+
+The torque of a machine can be defined as the amount of rotational energy required to perform mechanical work. As a result of torque applied, a machine element, such as the tool in this case rotates at a particular speed. This speed of rotation is measured by the tool rotation speed in revolutions per minute (RPM).
+
+In addition to the above definitions, the product of the torque and the tool rotation speeds give us the value of the power consumption of a machine. The equaiton for the same is as follows :
+
+$$ \boxed{P = \omega T} $$
+Where,
+
+$P =$ Power consumption of the machine in Watts\
+$T =$ Torque in Nm\
+$\omega =  2\pi N/60$, with $N$ being the tool rotational speed (RPM)\
+
+Let us now visualise the torque and tool rotation speed values for each machine type.
+
+```{r pwf, fig.cap="Working window of Torque and Rotational speeds",fig.align='center'}
+pl5 <- ggplot(data = df_train, aes(x = torque_nm , y = rotational_speed_rpm)) + geom_bin_2d() + theme_classic() + labs(x = "Torque (Nm)", 
+                                                                                                                                      y = "Rotational speed (RPM)") +  ggtitle("Working window of Torque and Rotational speeds")
+pl5
+```
+
+Based on the plot in figure \@ref(fig:pwf), we can observe 
+
+<div class="alert alert-info">
+  <strong> ⚠️The ideal working window for torque lies between 25 Nm - 50 Nm while that for the rotational speed lies between 1250-2000 RPM . ⚠️</strong> .
+</div>
+
+Let us now try to study how do the values for tool rotation speeds and torque vary based on power failure (PWF) faceted for each machine type.
+
+```{r facetwindown, fig.cap="Faceted hex plot of working windows for each machine type",fig.align='center'}
+pl6 <- ggplot(data = df_train, aes(x = torque_nm , 
+                                   y = rotational_speed_rpm, 
+                                   fill = factor(pwf))) + geom_hex() + scale_fill_manual(values = c("blue", "red")) + theme_classic() + labs(x = "Torque (Nm)", 
+                                                                                               y = "Rotational speed (RPM)") + guides(color = FALSE) + facet_wrap(~type) + labs(fill = "PWF status") + ggtitle("Torque and rotational speed window \n for each machine type") + theme(plot.title = element_text(hjust=0.5))
+pl6
+
+
+```
+
+Based on the analysis of figure \@ref(fig:facetwindown) we can conclude that
+
+<div class="alert alert-info">
+  ❌ Power failures (PWF) are observed to majorly occur outside the ideal working window. These failures are <strong> majorly concentrated in either the regions of high torque and low rotational speeds or low torque and high rotational speeds. The observation holds consistent for all three machine types ❌ </strong> .
+</div>
+
+## Toolwear 
+
+The toolwear can play a critical role in terms of overstrain failure (OSF) as __it can lead to excess loads on various parts of the machine equipment.__ Hence, it is pertinent to study the importance of toolwear through visualisations.
+
+```{r toolwear,fig.cap="Tool wear values for overstrain failure status (OSF) faceted for each machine type",fig.align='center'}
+
+pl7 <- ggplot(data = df_train, aes(x= factor(twf),y = tool_wear_min, fill = factor(twf))) + geom_violin() + scale_fill_manual(values = c('blue','red')) + geom_boxplot(width=0.1, color="black", alpha=0.2) + theme_classic() + labs(x = 'Overstrain failure (OSF) status',y = "Tool wear (mm)") + guides(fill = FALSE) + ggtitle("Tool wear values for overstrain failure status (OSF) \n faceted for each machine type") + facet_wrap(~type)
+pl7
+
+```
+
+After analysing figure \@ref(fig:toolwear), we observe that
+
+
+<div class="alert alert-info">
+  🔩 Overstrain failures as a result of tool wear occurs <strong>majorly for tool wear values of 200 mm or above </strong>. While there are some overstrain failures at low toolwear values, however, OSF is majorly a result of higher toolwear as can be observed through the violin plots. This observation is fairly consistent for each of the three machine types.   🔩.
+</div>
