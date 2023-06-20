@@ -1,5 +1,5 @@
 ---
-title: "Binary Machine Failure Prediction"
+title: "🔩🛠️⚠️ Binary Machine Failure Prediction"
 author: "Arindam Baruah"
 date: "2023-06-13"
 output:
@@ -217,7 +217,7 @@ As illustrated by figure \@ref(fig:tempdiff) and based on the heat transfer equa
   <strong> ⚠️ the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures. ⚠️</strong> .
 </div>
 
-## Torque and Tool rotation speed
+## Torque and Tool rotation speed {#label1}
 
 The torque of a machine can be defined as the amount of rotational energy required to perform mechanical work. As a result of torque applied, a machine element, such as the tool in this case rotates at a particular speed. This speed of rotation is measured by the tool rotation speed in revolutions per minute (RPM).
 
@@ -262,14 +262,32 @@ Based on the analysis of figure \@ref(fig:facetwindown) we can conclude that
   ❌ Power failures (PWF) are observed to majorly occur outside the ideal working window. These failures are <strong> majorly concentrated in either the regions of high torque and low rotational speeds or low torque and high rotational speeds. The observation holds consistent for all three machine types ❌ </strong> .
 </div>
 
+## Power consumption
+
+Based on the analysis in section \@ref(label1), let us study how does the power consumption differ for machines which have undergone power failure (PWF).
+
+```{r power, fig.cap="Probability density of power consumption for each PWF status",fig.align='center'}
+df_train <- df_train %>% mutate(power_w = torque_nm * 2* pi * rotational_speed_rpm/60)
+
+pl7 <- ggplot(data = df_train,
+              aes(x = power_w ,
+                  fill = factor(pwf))) + geom_density(alpha = 0.6) + theme_classic() + scale_fill_manual(values = c("#3268a8","#9c1144")) + labs(x = "Power consumption (in W)",y = "Probability density",fill = "PWF status" ) + ggtitle("Probability density of power consumption for each PWF status") + facet_wrap(~type)
+pl7
+```
+Figure \@ref(fig:power) illustrates the density distribution of power consumption for each power failure (PWF) status and faceted for each of the machine types. We can observe that:
+
+<div class="alert alert-info">
+  ⚡️the density plot for machines which have undergone power failure is bimodal in nature while the plot is unimodal for machines which did not undergo power failure. Based on the density plot, we can observe that the ideal working window for power consumption should be between 4000-10000 W. Machines reporting power consumption below or above this band are observed to be prone to undergo power failure.⚡️
+</div>
+
 ## Toolwear 
 
 The toolwear can play a critical role in terms of overstrain failure (OSF) as __it can lead to excess loads on various parts of the machine equipment.__ Hence, it is pertinent to study the importance of toolwear through visualisations.
 
 ```{r toolwear,fig.cap="Tool wear values for overstrain failure status (OSF) faceted for each machine type",fig.align='center'}
 
-pl7 <- ggplot(data = df_train, aes(x= factor(twf),y = tool_wear_min, fill = factor(twf))) + geom_violin() + scale_fill_manual(values = c('blue','red')) + geom_boxplot(width=0.1, color="black", alpha=0.2) + theme_classic() + labs(x = 'Overstrain failure (OSF) status',y = "Tool wear (mm)") + guides(fill = FALSE) + ggtitle("Tool wear values for overstrain failure status (OSF) \n faceted for each machine type") + facet_wrap(~type)
-pl7
+pl8 <- ggplot(data = df_train, aes(x= factor(twf),y = tool_wear_min, fill = factor(twf))) + geom_violin() + scale_fill_manual(values = c('blue','red')) + geom_boxplot(width=0.1, color="black", alpha=0.2) + theme_classic() + labs(x = 'Overstrain failure (OSF) status',y = "Tool wear (mm)") + guides(fill = FALSE) + ggtitle("Tool wear values for overstrain failure status (OSF) \n faceted for each machine type") + facet_wrap(~type)
+pl8
 
 ```
 
@@ -279,3 +297,4 @@ After analysing figure \@ref(fig:toolwear), we observe that
 <div class="alert alert-info">
   🔩 Overstrain failures as a result of tool wear occurs <strong>majorly for tool wear values of 200 mm or above </strong>. While there are some overstrain failures at low toolwear values, however, OSF is majorly a result of higher toolwear as can be observed through the violin plots. This observation is fairly consistent for each of the three machine types.   🔩.
 </div>
+
