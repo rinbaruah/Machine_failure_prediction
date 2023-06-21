@@ -18,10 +18,6 @@ knitr::opts_chunk$set(echo = TRUE,
 
 
 
-
-
-
-
 # Introduction
 
 Binary machine failure prediction using machine learning is a technique employed to anticipate the occurrence of failures or malfunctions in a binary system or machine. With the increasing complexity of modern machines, the ability to predict and prevent failures becomes crucial for optimizing performance, reducing downtime, and avoiding costly repairs.
@@ -60,6 +56,9 @@ library(data.table)
 library(visdat)
 library(janitor)
 library(cowplot)
+library(caTools)
+library(pscl)
+library(ROCR)
 ```
 
 Great ! We have all the libraries loaded. Next, we are gonna load the required dataset for conducting the machine failure classification analysis. 
@@ -134,12 +133,14 @@ Let us see the number of machine failures for each of the machine types.
 
 ```{r failtype, fig.cap="Number of machine failures for each type", fig.align='center'}
 
+facet_lookup <- c("H" = "Heavy (H)","L"= "Light (L)","M" = "Medium (M)")
 df_type_group <- df_train %>% group_by(type,machine_failure) %>% summarise(count = n())
 df_type_group <- df_type_group %>% group_by(type) %>% mutate(total = sum(count))
 df_type_group <- df_type_group %>% mutate(percentage = 100 * (count/total))
 pl1 <- ggplot(data = df_type_group, 
               aes(x = factor(machine_failure),
-                  y = count)) + geom_col(aes(fill = type),color='black') + facet_wrap(~type) + geom_label(aes(label = count)) + labs(x = "Machine failure status", 
+                  y = count)) + geom_col(aes(fill = type),color='black') + facet_wrap(~type,
+                                                                                      labeller = as_labeller(facet_lookup)) + geom_label(aes(label = count)) + labs(x = "Machine failure status", 
                                                                                                                        y = "Number of incidents") + ggtitle("Number of machine failures for each type") + theme_classic() + theme(legend.position = 'none') 
 pl1
 ```
@@ -151,11 +152,11 @@ Figure \@ref(fig:failtype) illustrates the number of failures observed for each 
 - __1 %__ of the incidents for machine type "M"\
 
 <div class="alert alert-info">
-  <strong> 📵 Hence, we can observe that the number of failure cases are <strong>fairly evenly distributed among each of the machine types.<strong> 📵 .
+  <strong> 📵 Hence, we can observe that the number of failure cases are <strong>fairly evenly distributed among each of the machine types.</strong> 📵 .
 </div>
 
 
-## Air and process temperatures
+## Air and process temperatures {#label2}
 
 Temperatures can play a critical role in relation to machine health. In this dataset, we have air and process temperatures. The difference of these values could allow us to understand the overall heat dissipation of the machines. Analysing these variables may allow us when do the machines undergo overall failure as well as heat dissipation failure (HDF).
 
@@ -214,7 +215,7 @@ As illustrated by figure \@ref(fig:tempdiff) and based on the heat transfer equa
 
 
 <div class="alert alert-info">
-  <strong> ⚠️ the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures. ⚠️</strong> .
+  <strong> ⚠️ the majority of the heat dissipation failures occur at low temperature differences between process and air temperatures. ⚠️ </strong> .
 </div>
 
 ## Torque and Tool rotation speed {#label1}
@@ -241,7 +242,7 @@ pl5
 Based on the plot in figure \@ref(fig:pwf), we can observe 
 
 <div class="alert alert-info">
-  <strong> ⚠️The ideal working window for torque lies between 25 Nm - 50 Nm while that for the rotational speed lies between 1250-2000 RPM . ⚠️</strong> .
+  <strong> ⚠️The ideal working window for torque lies between 25 Nm - 50 Nm while that for the rotational speed lies between 1250-2000 RPM . ⚠️ </strong> .
 </div>
 
 Let us now try to study how do the values for tool rotation speeds and torque vary based on power failure (PWF) faceted for each machine type.
@@ -250,7 +251,8 @@ Let us now try to study how do the values for tool rotation speeds and torque va
 pl6 <- ggplot(data = df_train, aes(x = torque_nm , 
                                    y = rotational_speed_rpm, 
                                    fill = factor(pwf))) + geom_hex() + scale_fill_manual(values = c("blue", "red")) + theme_classic() + labs(x = "Torque (Nm)", 
-                                                                                               y = "Rotational speed (RPM)") + guides(color = FALSE) + facet_wrap(~type) + labs(fill = "PWF status") + ggtitle("Torque and rotational speed window \n for each machine type") + theme(plot.title = element_text(hjust=0.5))
+                                                                                               y = "Rotational speed (RPM)") + guides(color = FALSE) + facet_wrap(~type,
+                                                                                      labeller = as_labeller(facet_lookup)) + labs(fill = "PWF status") + ggtitle("Torque and rotational speed window \n for each machine type") + theme(plot.title = element_text(hjust=0.5))
 pl6
 
 
@@ -271,7 +273,8 @@ df_train <- df_train %>% mutate(power_w = torque_nm * 2* pi * rotational_speed_r
 
 pl7 <- ggplot(data = df_train,
               aes(x = power_w ,
-                  fill = factor(pwf))) + geom_density(alpha = 0.6) + theme_classic() + scale_fill_manual(values = c("#3268a8","#9c1144")) + labs(x = "Power consumption (in W)",y = "Probability density",fill = "PWF status" ) + ggtitle("Probability density of power consumption for each PWF status") + facet_wrap(~type)
+                  fill = factor(pwf))) + geom_density(alpha = 0.6) + theme_classic() + scale_fill_manual(values = c("#3268a8","#9c1144")) + labs(x = "Power consumption (in W)",y = "Probability density",fill = "PWF status" ) + ggtitle("Probability density of power consumption for each PWF status") + facet_wrap(~type,
+                                                                                      labeller = as_labeller(facet_lookup))
 pl7
 ```
 Figure \@ref(fig:power) illustrates the density distribution of power consumption for each power failure (PWF) status and faceted for each of the machine types. We can observe that:
@@ -286,7 +289,7 @@ The toolwear can play a critical role in terms of overstrain failure (OSF) as __
 
 ```{r toolwear,fig.cap="Tool wear values for overstrain failure status (OSF) faceted for each machine type",fig.align='center'}
 
-pl8 <- ggplot(data = df_train, aes(x= factor(twf),y = tool_wear_min, fill = factor(twf))) + geom_violin() + scale_fill_manual(values = c('blue','red')) + geom_boxplot(width=0.1, color="black", alpha=0.2) + theme_classic() + labs(x = 'Overstrain failure (OSF) status',y = "Tool wear (mm)") + guides(fill = FALSE) + ggtitle("Tool wear values for overstrain failure status (OSF) \n faceted for each machine type") + facet_wrap(~type)
+pl8 <- ggplot(data = df_train, aes(x= factor(twf),y = tool_wear_min, fill = factor(twf))) + geom_violin() + scale_fill_manual(values = c('blue','red')) + geom_boxplot(width=0.1, color="black", alpha=0.2) + theme_classic() + labs(x = 'Overstrain failure (OSF) status',y = "Tool wear (mm)") + guides(fill = FALSE) + ggtitle("Tool wear values for overstrain failure status (OSF) \n faceted for each machine type") + facet_wrap(~type,labeller = as_labeller(facet_lookup))
 pl8
 
 ```
@@ -297,4 +300,98 @@ After analysing figure \@ref(fig:toolwear), we observe that
 <div class="alert alert-info">
   🔩 Overstrain failures as a result of tool wear occurs <strong>majorly for tool wear values of 200 mm or above </strong>. While there are some overstrain failures at low toolwear values, however, OSF is majorly a result of higher toolwear as can be observed through the violin plots. This observation is fairly consistent for each of the three machine types.   🔩.
 </div>
+
+
+# Feature Engineering
+
+We will majorly concentrate on two new features. These features have already been analysed in sections \@ref(label1) and \@ref(label2). These __features are namely temperature difference and power consumption.__
+
+```{r feature-engg, echo=TRUE}
+df_train <- df_train %>% mutate(temp_diff_k = process_temperature_k - air_temperature_k) %>% select(-c(process_temperature_k,air_temperature_k))
+df_train <- df_train %>% mutate(power_w = torque_nm * 2* pi * rotational_speed_rpm/60) %>% select(-c(torque_nm,rotational_speed_rpm))
+
+```
+
+
+
+In the next step, we will encode the character variable for machine type into machine readable format __by one hot encoding the variable__ as shown below.
+
+```{r one-hot,echo=TRUE}
+
+df_train$type <- factor(df_train$type)
+dt_train <- data.table(df_train)
+dt_train <- one_hot(dt_train,cols = as.factor("type"))
+
+df_train <- as.data.frame(dt_train)
+```
+
+# Correlation plot
+
+After analysing the various variables and performing feature engineering, let us create a correlation plot.
+
+```{r corrplot}
+corrplot(cor(df_train),        # Correlation matrix
+         method = "number", # Correlation plot method
+         type = "full",    # Correlation plot style (also "upper" and "lower")
+         diag = TRUE,      # If TRUE (default), adds the diagonal
+         tl.col = "black", # Labels color
+         bg = "white",     # Background color
+         title = "",       # Main title
+         col = NULL,
+         number.cex = 0.7)
+
+```
+
+
+
+<div class="alert alert-info">
+ 💡 Based on the above correlation plot, we can observe that machine failure has <strong> high correlation with TWF,PSF,HDF,OSF and RNF </strong>. This indicates that a failure for any of these individual variables could lead to machine failure 💡.
+</div>
+
+# Classification model
+
+In order to create a classification, we must first segregate the dataset into train and test datasets.
+
+```{r train-test, echo=TRUE}
+set.seed(101)
+sample=sample.split(df_train$machine_failure,SplitRatio=0.7)
+train=subset(df_train,sample==T)
+test=subset(df_train,sample==F)
+
+```
+
+After creating the required train and test dataframes, we now train the dataset by applying various classification algorithms. These have been delineated in the following sections.
+
+## Logistic Regression
+
+```{r logit, echo=TRUE}
+model_logit <- glm(machine_failure~.,family=binomial(link='logit'),data=train)
+pR2(model_logit)
+```
+<div class="alert alert-info">
+ 💡 Upon studying the McFadden $R^2$ value, we observe that the <strong>model accuracy was approximately 71.2% </strong> 💡.
+</div>
+
+```{r}
+fitted.results <- predict(model_logit,newdata=subset(train,select=-(5)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != test$machine_failure)
+print(paste('Accuracy',1-misClasificError))
+
+```
+
+
+As we can observe, the logistic regression model was able to __accurately predict 97.2% of the machine failures__.
+
+
+```{r}
+p <- predict(model_logit, newdata=train, type="response")
+pr <- prediction(p, train$machine_failure)
+prf <- performance(pr, measure = "tpr", x.measure = "fpr")
+plot(prf)
+auc <- performance(pr, measure = "auc")
+auc <- auc@y.values[[1]]
+auc
+```
 
