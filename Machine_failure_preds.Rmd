@@ -59,6 +59,11 @@ library(cowplot)
 library(caTools)
 library(pscl)
 library(ROCR)
+library(caret)
+library(xgboost)
+library(randomForest)
+library(lightgbm)
+library(Matrix)
 ```
 
 Great ! We have all the libraries loaded. Next, we are gonna load the required dataset for conducting the machine failure classification analysis. 
@@ -372,26 +377,251 @@ pR2(model_logit)
  💡 Upon studying the McFadden $R^2$ value, we observe that the <strong>model accuracy was approximately 71.2% </strong> 💡.
 </div>
 
+
+Let us now observe how well we can predict on the test dataset based on the logistic regression model.
+
 ```{r}
-fitted.results <- predict(model_logit,newdata=subset(train,select=-(5)),type='response')
+fitted.results <- predict(model_logit,newdata=subset(test,select=-(machine_failure)),type='response')
 fitted.results <- ifelse(fitted.results > 0.5,1,0)
 
 misClasificError <- mean(fitted.results != test$machine_failure)
-print(paste('Accuracy',1-misClasificError))
+print(paste('Accuracy of logistic regression:',1-misClasificError))
 
 ```
 
 
 As we can observe, the logistic regression model was able to __accurately predict 97.2% of the machine failures__.
 
+Let us further study the performance of the logistic regression model through the Receiver Operating Curve (ROC) metric.
 
-```{r}
-p <- predict(model_logit, newdata=train, type="response")
-pr <- prediction(p, train$machine_failure)
+
+```{r roc-logit, fig.cap="Receiver Operating Curve for Logistic Regression",fig.align='center'}
+p <- as.numeric(predict(model_logit, newdata=subset(test,select=-c(machine_failure)), type="response"))
+pr <- prediction(p, test$machine_failure)
 prf <- performance(pr, measure = "tpr", x.measure = "fpr")
 plot(prf)
-auc <- performance(pr, measure = "auc")
-auc <- auc@y.values[[1]]
-auc
+auc_logit <- performance(pr, measure = "auc")
+auc_logit <- auc_logit@y.values[[1]]
+title("Receiver Operating Curve for Logistic Regression")
+
 ```
 
+Based on the ROC as illustrated by figure \@ref(fig:roc-logit), we can observe that a large section of the upper half of the plot has been covered by the operating curve. 
+
+
+
+<div class="alert alert-info">
+ 💡 The Area Under Curve (AUC) score of `r auc_logit` suggests that the model was able to <strong> predict the machine failures fairly well. </strong> 💡
+</div>
+
+
+Next, we try to obtain a more intuitive performance metric of the model by creating a confusion matrix.
+
+
+```{r conf-mat-viz}
+draw_confusion_matrix <- function(cm) {
+
+  layout(matrix(c(1,1,2)))
+  par(mar=c(2,2,2,2))
+  plot(c(100, 345), c(300, 450), type = "n", xlab="", ylab="", xaxt='n', yaxt='n')
+  title('CONFUSION MATRIX', cex.main=2)
+
+  # create the matrix 
+  rect(150, 430, 240, 370, col='#3F97D0')
+  text(195, 435, 'False', cex=1.2)
+  rect(250, 430, 340, 370, col='#F7AD50')
+  text(295, 435, 'True', cex=1.2)
+  text(125, 370, 'Predicted', cex=1.3, srt=90, font=2)
+  text(245, 450, 'Actual', cex=1.3, font=2)
+  rect(150, 305, 240, 365, col='#F7AD50')
+  rect(250, 305, 340, 365, col='#3F97D0')
+  text(140, 400, 'False', cex=1.2, srt=90)
+  text(140, 335, 'True', cex=1.2, srt=90)
+
+  # add in the cm results 
+  res <- as.numeric(cm$table)
+  text(195, 400, res[1], cex=1.6, font=2, col='white')
+  text(195, 335, res[2], cex=1.6, font=2, col='white')
+  text(295, 400, res[3], cex=1.6, font=2, col='white')
+  text(295, 335, res[4], cex=1.6, font=2, col='white')
+
+  # add in the specifics 
+  plot(c(100, 0), c(100, 0), type = "n", xlab="", ylab="", main = "DETAILS", xaxt='n', yaxt='n')
+  text(10, 85, names(cm$byClass[1]), cex=1.2, font=2)
+  text(10, 70, round(as.numeric(cm$byClass[1]), 3), cex=1.2)
+  text(30, 85, names(cm$byClass[2]), cex=1.2, font=2)
+  text(30, 70, round(as.numeric(cm$byClass[2]), 3), cex=1.2)
+  text(50, 85, names(cm$byClass[5]), cex=1.2, font=2)
+  text(50, 70, round(as.numeric(cm$byClass[5]), 3), cex=1.2)
+  text(70, 85, names(cm$byClass[6]), cex=1.2, font=2)
+  text(70, 70, round(as.numeric(cm$byClass[6]), 3), cex=1.2)
+  text(90, 85, names(cm$byClass[7]), cex=1.2, font=2)
+  text(90, 70, round(as.numeric(cm$byClass[7]), 3), cex=1.2)
+
+  # add in the accuracy information 
+  text(30, 35, names(cm$overall[1]), cex=1.5, font=2)
+  text(30, 20, round(as.numeric(cm$overall[1]), 3), cex=1.4)
+  text(70, 35, names(cm$overall[2]), cex=1.5, font=2)
+  text(70, 20, round(as.numeric(cm$overall[2]), 3), cex=1.4)
+}  
+```
+
+
+
+```{r conf-mat, fig.cap="Confusion matrix for Logistic Regression",fig.align='center'}
+
+cm_logit <- confusionMatrix(factor(fitted.results),factor(test$machine_failure))
+draw_confusion_matrix(cm_logit)
+```
+Figure \@ref(fig:conf-mat) illustrates the confusion matrix for the logistic regression model along with its various performance metrics.
+
+```{r test-data-clean}
+
+test_id <- df_test$id
+df_test <- df_test %>% select(-c(id,`Product ID`))
+df_test <- clean_names(df_test)
+df_test$type <- factor(df_test$type)
+df_test<- data.table(df_test)
+df_test <- one_hot(df_test,cols = as.factor("type"))
+
+df_test <- as.data.frame(df_test)
+
+df_test <- df_test %>% mutate(temp_diff_k = process_temperature_k - air_temperature_k) %>% select(-c(process_temperature_k,air_temperature_k))
+df_test <- df_test %>% mutate(power_w = torque_nm * 2* pi * rotational_speed_rpm/60) %>% select(-c(torque_nm,rotational_speed_rpm))
+
+df_test <- df_test %>% select(c("type_H","type_L","type_M","tool_wear_min","twf","hdf","pwf","osf","rnf","power_w","temp_diff_k"))
+
+```
+
+```{r}
+
+fitted.results <- predict(model_logit,df_test,type='response')
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results$id <- test_id
+fitted.results <- fitted.results %>% select(c("id","Machine failure"))
+
+write_csv(fitted.results,"Logistic_Reg_predictions.csv")
+
+
+```
+
+## Random Forest
+
+Let us use an ensemble algorithm to classify our results. We shall utilise the Random Forest technique which utilises multiple decision trees to predict results.
+
+```{r rand-forest}
+
+rf_model<-randomForest(machine_failure~.,data=train)
+
+```
+
+```{r errormod,fig.cap="Error vs Number of trees for Random Forest",fig.align='center'}
+plot(rf_model)
+```
+As we can observe from figure \@ref(fig:errormod), 
+
+
+<div class="alert alert-info">
+ 💡 the error of the random forest model is observed to reduce <strong> as the number of trees cross 100 </strong>. </strong> 💡
+</div>
+
+```{r conf-mat-rf,fig.cap="Confusion matrix of the random forest model",fig.align='center'}
+pred_rf <- predict(rf_model,test, type = 'class')
+pred_rf <- if_else(pred_rf > 0.5,1,0)
+cm_rf <- confusionMatrix(factor(pred_rf),factor(test$machine_failure))
+draw_confusion_matrix(cm_rf)
+
+```
+
+
+
+```{r}
+
+fitted.results <- predict(rf_model,df_test,type='class')
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results$id <- test_id
+fitted.results <- fitted.results %>% select(c("id","Machine failure"))
+
+write_csv(fitted.results,"RF_predictions.csv")
+
+
+```
+
+## XGboost
+
+Let us try to use an extra gradient boosted ensemble method commonly termed as the XGboost classifier.
+
+```{r}
+xgb_model <- xgboost(data = as.matrix(train %>% select(-c(machine_failure))), label = as.matrix(train$machine_failure), 
+                     max.depth = 2, eta = 1, nthread = 2, nrounds = 2, objective = "binary:logistic")
+```
+```{r}
+pred_xgb <- predict(xgb_model, as.matrix(test %>% select(-c(machine_failure))))
+pred_xgb <- if_else(pred_xgb > 0.5,1,0)
+```
+
+
+```{r conf-mat-xgb,fig.cap="Confusion matrix of the XGBoost model",fig.align='center'}
+
+cm_xgb <- confusionMatrix(factor(pred_xgb),factor(test$machine_failure))
+draw_confusion_matrix(cm_xgb)
+
+```
+
+
+
+```{r}
+
+fitted.results <- predict(xgb_model,as.matrix(df_test))
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results$id <- test_id
+fitted.results <- fitted.results %>% select(c("id","Machine failure"))
+
+write_csv(fitted.results,"XGB_predictions.csv")
+
+
+```
+
+
+## Light GBM
+
+Let us utilise the LGBM algorithm and train it on the given dataset.
+
+```{r include=FALSE}
+
+params = list(max_bin = 8,
+               learning_rate = 0.001,
+               objective = "binary",
+               metric = 'binary_logloss')
+
+trainm = sparse.model.matrix(machine_failure~., data = train )
+train_label = train[,"machine_failure"]
+
+train_matrix = lgb.Dataset(data = as.matrix(trainm), label = train_label)
+
+model_lgb = lightgbm(params = params, train_matrix, nrounds = 2000)
+```
+
+
+```{r cf-lgb,fig.cap="Confusion matrix of the Light GB model",fig.align='center'}
+pred_lgb = predict(model_lgb, as.matrix(test))
+pred_lgb <- if_else(pred_lgb > 0.5,1,0)
+cm_lgb <- confusionMatrix(factor(pred_lgb),factor(test$machine_failure))
+draw_confusion_matrix(cm_lgb)
+```
+
+```{r}
+
+fitted.results <- predict(model_lgb,as.matrix(df_test),predict_disable_shape_check=TRUE)
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results$id <- test_id
+fitted.results <- fitted.results %>% select(c("id","Machine failure"))
+
+write_csv(fitted.results,"LGB_predictions.csv")
+
+
+```
