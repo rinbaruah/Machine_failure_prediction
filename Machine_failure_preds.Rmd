@@ -529,7 +529,7 @@ As we can observe from figure \@ref(fig:errormod),
 
 ```{r conf-mat-rf,fig.cap="Confusion matrix of the random forest model",fig.align='center'}
 pred_rf <- predict(rf_model,test, type = 'class')
-pred_rf <- if_else(pred_rf > 0.5,1,0)
+pred_rf <- if_else(pred_rf > 0.3,1,0)
 cm_rf <- confusionMatrix(factor(pred_rf),factor(test$machine_failure))
 draw_confusion_matrix(cm_rf)
 
@@ -540,8 +540,8 @@ draw_confusion_matrix(cm_rf)
 ```{r}
 
 fitted.results <- predict(rf_model,df_test,type='class')
-fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
-fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.3,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.3, 1, 0)")
 fitted.results$id <- test_id
 fitted.results <- fitted.results %>% select(c("id","Machine failure"))
 
@@ -560,7 +560,7 @@ xgb_model <- xgboost(data = as.matrix(train %>% select(-c(machine_failure))), la
 ```
 ```{r}
 pred_xgb <- predict(xgb_model, as.matrix(test %>% select(-c(machine_failure))))
-pred_xgb <- if_else(pred_xgb > 0.5,1,0)
+pred_xgb <- if_else(pred_xgb > 0.3,1,0)
 ```
 
 
@@ -576,8 +576,8 @@ draw_confusion_matrix(cm_xgb)
 ```{r}
 
 fitted.results <- predict(xgb_model,as.matrix(df_test))
-fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
-fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.3,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.3, 1, 0)")
 fitted.results$id <- test_id
 fitted.results <- fitted.results %>% select(c("id","Machine failure"))
 
@@ -609,7 +609,7 @@ model_lgb = lightgbm(params = params, train_matrix, nrounds = 2000)
 
 ```{r cf-lgb,fig.cap="Confusion matrix of the Light GB model",fig.align='center'}
 pred_lgb = predict(model_lgb, as.matrix(test))
-pred_lgb <- if_else(pred_lgb > 0.5,1,0)
+pred_lgb <- if_else(pred_lgb > 0.3,1,0)
 cm_lgb <- confusionMatrix(factor(pred_lgb),factor(test$machine_failure))
 draw_confusion_matrix(cm_lgb)
 ```
@@ -617,8 +617,8 @@ draw_confusion_matrix(cm_lgb)
 ```{r}
 
 fitted.results <- predict(model_lgb,as.matrix(df_test),predict_disable_shape_check=TRUE)
-fitted.results <- as.data.frame(ifelse(fitted.results > 0.5,1,0))
-fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.5, 1, 0)")
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.3,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.3, 1, 0)")
 fitted.results$id <- test_id
 fitted.results <- fitted.results %>% select(c("id","Machine failure"))
 
@@ -693,3 +693,56 @@ write_csv(fitted.results,"Cat_predictions.csv")
 
 
 ```
+
+
+
+## Feature transformation
+
+Now that we have created all our baseline models, let us try our hand out with some feature transformation with standard scaling options.
+
+```{r standard-scale, echo =TRUE}
+
+train$tool_wear_min <- train$tool_wear_min %>% scale(center=TRUE,scale=TRUE)
+train$power_w <- train$power_w %>% scale(center=TRUE,scale=TRUE)
+train$temp_diff_k <- train$temp_diff_k %>% scale(center=TRUE,scale=TRUE)
+
+test$tool_wear_min <- test$tool_wear_min %>% scale(center=TRUE,scale=TRUE)
+test$power_w <- test$power_w %>% scale(center=TRUE,scale=TRUE)
+test$temp_diff_k <- test$temp_diff_k %>% scale(center=TRUE,scale=TRUE)
+```
+
+Now that we have standardised all the continuous numeric variables, let us attempt to train the model once again on the scaled dataset.
+
+
+```{r logit, echo=TRUE}
+model_logit <- glm(machine_failure~.,family=binomial(link='logit'),data=train)
+pR2(model_logit)
+```
+
+```{r}
+fitted.results <- predict(model_logit,newdata=subset(test,select=-(machine_failure)),type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+
+misClasificError <- mean(fitted.results != test$machine_failure)
+print(paste('Accuracy of logistic regression:',1-misClasificError))
+
+```
+
+
+```{r}
+df_test$tool_wear_min <- df_test$tool_wear_min %>% scale(center=TRUE,scale=TRUE)
+df_test$power_w <- df_test$power_w %>% scale(center=TRUE,scale=TRUE)
+df_test$temp_diff_k <- df_test$temp_diff_k %>% scale(center=TRUE,scale=TRUE)
+
+
+fitted.results <- predict(model_logit,df_test,type='response')
+fitted.results <- as.data.frame(ifelse(fitted.results > 0.3,1,0))
+fitted.results <- fitted.results %>% rename("Machine failure" = "ifelse(fitted.results > 0.3, 1, 0)")
+fitted.results$id <- test_id
+fitted.results <- fitted.results %>% select(c("id","Machine failure"))
+
+write_csv(fitted.results,"Logistic_Reg_predictions_std.csv")
+
+
+```
+
