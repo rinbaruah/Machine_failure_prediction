@@ -714,7 +714,7 @@ test$temp_diff_k <- test$temp_diff_k %>% scale(center=TRUE,scale=TRUE)
 Now that we have standardised all the continuous numeric variables, let us attempt to train the model once again on the scaled dataset.
 
 
-```{r logit, echo=TRUE}
+```{r logit_std, echo=TRUE}
 model_logit <- glm(machine_failure~.,family=binomial(link='logit'),data=train)
 pR2(model_logit)
 ```
